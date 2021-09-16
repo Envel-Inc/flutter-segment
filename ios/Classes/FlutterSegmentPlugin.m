@@ -2,7 +2,7 @@
 #import <Analytics/SEGAnalytics.h>
 #import <Analytics/SEGContext.h>
 #import <Analytics/SEGMiddleware.h>
-#import <Segment_Amplitude/SEGAmplitudeIntegrationFactory.h>
+#import <Segment-Amplitude/SEGAmplitudeIntegrationFactory.h>
 #import <Segment-Firebase/SEGFirebaseIntegrationFactory.h>
 
 @implementation FlutterSegmentPlugin
