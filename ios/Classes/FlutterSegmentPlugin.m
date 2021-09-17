@@ -106,12 +106,12 @@ static NSDictionary *_appendToContextMiddleware;
     configuration.trackApplicationLifecycleEvents = trackApplicationLifecycleEvents;
 
     if (isAmplitudeIntegrationEnabled) {
-        NSLog("Segment Amplitude enabled");
+        NSLog(@"Segment Amplitude enabled");
       [configuration use:[SEGAmplitudeIntegrationFactory instance]];
     }
 
     if (isFirebaseIntegrationEnabled) {
-        NSLog("Segment Firebase enabled");
+        NSLog(@"Segment Firebase enabled");
         [configuration use:[SEGFirebaseIntegrationFactory instance]];
     }
 
