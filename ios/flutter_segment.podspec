@@ -19,7 +19,7 @@ A new flutter plugin project.
   s.dependency 'Flutter'
   s.dependency 'Analytics', '3.7.0'
   s.dependency 'Segment-Amplitude', '3.0.1'
-  s.dependency 'Segment-Firebase', '2.7.7'
+  s.dependency 'Segment-Firebase', '2.7.8'
   s.ios.deployment_target = '10.0'
 
 end
