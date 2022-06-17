@@ -34,8 +34,8 @@ android {
 
     dependencies {
         implementation 'com.segment.analytics.android:analytics:4.7.0'
-        implementation 'com.segment.analytics.android.integrations:amplitude:+'
-        implementation 'com.segment.analytics.android.integrations:firebase:+@aar'
+        implementation 'com.segment.analytics.android.integrations:amplitude:3.1.0'
+        implementation 'com.segment.analytics.android.integrations:firebase:2.3.2@aar'
     }
 }
 
