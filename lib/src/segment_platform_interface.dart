@@ -1,3 +1,4 @@
+import 'package:flutter_segment/src/segment_config.dart';
 import 'package:flutter_segment/src/segment_method_channel.dart';
 
 abstract class SegmentPlatform {
@@ -9,6 +10,12 @@ abstract class SegmentPlatform {
   ///
   /// Defaults to [SegmentMethodChannel]
   static SegmentPlatform instance = SegmentMethodChannel();
+
+  Future<void> config({
+    required SegmentConfig options,
+  }) {
+    throw UnimplementedError('config() has not been implemented.');
+  }
 
   Future<void> identify({
     String? userId,
@@ -63,6 +70,10 @@ abstract class SegmentPlatform {
 
   Future<void> enable() {
     throw UnimplementedError('enable() has not been implemented.');
+  }
+
+  Future<void> flush() {
+    throw UnimplementedError('flush() has not been implemented.');
   }
 
   Future<void> debug(bool enabled) {

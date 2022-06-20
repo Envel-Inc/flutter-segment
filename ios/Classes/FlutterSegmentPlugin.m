@@ -1,134 +1,135 @@
+#import "SEGAppsFlyerIntegrationFactory.h"
 #import "FlutterSegmentPlugin.h"
-#import <Analytics/SEGAnalytics.h>
-#import <Analytics/SEGContext.h>
-#import <Analytics/SEGMiddleware.h>
+#import <Segment/SEGAnalytics.h>
+#import <Segment/SEGContext.h>
+#import <Segment/SEGMiddleware.h>
 #import <Segment_Amplitude/SEGAmplitudeIntegrationFactory.h>
 #import <Segment_Firebase/SEGFirebaseIntegrationFactory.h>
 
 @implementation FlutterSegmentPlugin
 // Contents to be appended to the context
 static NSDictionary *_appendToContextMiddleware;
+static BOOL wasSetupFromFile = NO;
 
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
-  @try {
-    NSString *path = [[NSBundle mainBundle] pathForResource: @"Info" ofType: @"plist"];
-    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile: path];
-    NSString *writeKey = [dict objectForKey: @"com.claimsforce.segment.WRITE_KEY"];
-    BOOL trackApplicationLifecycleEvents = [[dict objectForKey: @"com.claimsforce.segment.TRACK_APPLICATION_LIFECYCLE_EVENTS"] boolValue];
-    BOOL isAmplitudeIntegrationEnabled = [[dict objectForKey: @"com.claimsforce.segment.ENABLE_AMPLITUDE_INTEGRATION"] boolValue];
+    FlutterMethodChannel* channel = [FlutterMethodChannel
+      methodChannelWithName:@"flutter_segment"
+      binaryMessenger:[registrar messenger]];
+    FlutterSegmentPlugin* instance = [[FlutterSegmentPlugin alloc] init];
     BOOL isFirebaseIntegrationEnabled = [[dict objectForKey: @"com.claimsforce.segment.ENABLE_FIREBASE_INTEGRATION"] boolValue];
-    SEGAnalyticsConfiguration *configuration = [SEGAnalyticsConfiguration configurationWithWriteKey:writeKey];
+    
+    SEGAnalyticsConfiguration *configuration = [FlutterSegmentPlugin createConfigFromFile];
+    if(configuration) {
+        [instance setup:configuration];
+        wasSetupFromFile = YES;
+    }
+    
+    [registrar addMethodCallDelegate:instance channel:channel];
+}
 
-    // This middleware is responsible for manipulating only the context part of the request,
-    // leaving all other fields as is.
-    SEGMiddlewareBlock contextMiddleware = ^(SEGContext *_Nonnull context, SEGMiddlewareNext _Nonnull next) {
-      // Do not execute if there is nothing to append
-      if (_appendToContextMiddleware == nil) {
-        next(context);
-        return;
-      }
-
-      // Avoid overriding the context if there is none to override
-      // (see different payload types here: https://github.com/segmentio/analytics-ios/tree/master/Analytics/Classes/Integrations)
-      if (![context.payload isKindOfClass:[SEGTrackPayload class]]
-        && ![context.payload isKindOfClass:[SEGScreenPayload class]]
-        && ![context.payload isKindOfClass:[SEGGroupPayload class]]
-        && ![context.payload isKindOfClass:[SEGIdentifyPayload class]]) {
-        next(context);
-        return;
-      }
-
-      next([context
-        modify: ^(id<SEGMutableContext> _Nonnull ctx) {
+- (void)setup:(SEGAnalyticsConfiguration*) configuration  {
+    @try {
+        // This middleware is responsible for manipulating only the context part of the request,
+        // leaving all other fields as is.
+        SEGMiddlewareBlock contextMiddleware = ^(SEGContext *_Nonnull context, SEGMiddlewareNext _Nonnull next) {
+          // Do not execute if there is nothing to append
           if (_appendToContextMiddleware == nil) {
+            next(context);
             return;
           }
 
-          // do not touch it if no payload is present
-          if (ctx.payload == nil) {
-            NSLog(@"Cannot update segment context when the current context payload is empty.");
+          // Avoid overriding the context if there is none to override
+          // (see different payload types here: https://github.com/segmentio/analytics-ios/tree/master/Analytics/Classes/Integrations)
+          if (![context.payload isKindOfClass:[SEGTrackPayload class]]
+            && ![context.payload isKindOfClass:[SEGScreenPayload class]]
+            && ![context.payload isKindOfClass:[SEGGroupPayload class]]
+            && ![context.payload isKindOfClass:[SEGIdentifyPayload class]]) {
+            next(context);
             return;
           }
 
-          @try {
-            // We need to perform a deep merge to not lose any sub-dictionary
-            // that is already set. [contextToAppend] has precedence over [ctx.payload.context] values
-            NSDictionary *combinedContext = [FlutterSegmentPlugin
-              mergeDictionary: ctx.payload.context == nil
-                ? [[NSDictionary alloc] init]
-                : [ctx.payload.context copy]
-              with: _appendToContextMiddleware];
+          next([context
+            modify: ^(id<SEGMutableContext> _Nonnull ctx) {
+              if (_appendToContextMiddleware == nil) {
+                return;
+              }
 
-            // SEGPayload does not offer copyWith* methods, so we have to
-            // manually test and re-create it for each of its type.
-            if ([ctx.payload isKindOfClass:[SEGTrackPayload class]]) {
-              ctx.payload = [[SEGTrackPayload alloc]
-                initWithEvent: ((SEGTrackPayload*)ctx.payload).event
-                properties: ((SEGTrackPayload*)ctx.payload).properties
-                context: combinedContext
-                integrations: ((SEGTrackPayload*)ctx.payload).integrations
-              ];
-            } else if ([ctx.payload isKindOfClass:[SEGScreenPayload class]]) {
-              ctx.payload = [[SEGScreenPayload alloc]
-                initWithName: ((SEGScreenPayload*)ctx.payload).name
-                properties: ((SEGScreenPayload*)ctx.payload).properties
-                context: combinedContext
-                integrations: ((SEGScreenPayload*)ctx.payload).integrations
-              ];
-            } else if ([ctx.payload isKindOfClass:[SEGGroupPayload class]]) {
-              ctx.payload = [[SEGGroupPayload alloc]
-                initWithGroupId: ((SEGGroupPayload*)ctx.payload).groupId
-                traits: ((SEGGroupPayload*)ctx.payload).traits
-                context: combinedContext
-                integrations: ((SEGGroupPayload*)ctx.payload).integrations
-              ];
-            } else if ([ctx.payload isKindOfClass:[SEGIdentifyPayload class]]) {
-              ctx.payload = [[SEGIdentifyPayload alloc]
-                initWithUserId: ((SEGIdentifyPayload*)ctx.payload).userId
-                anonymousId: ((SEGIdentifyPayload*)ctx.payload).anonymousId
-                traits: ((SEGIdentifyPayload*)ctx.payload).traits
-                context: combinedContext
-                integrations: ((SEGIdentifyPayload*)ctx.payload).integrations
-              ];
-            }
-          }
-          @catch (NSException *exception) {
-            NSLog(@"Could not update segment context: %@", [exception reason]);
-          }
-        }]
-      );
-    };
+              // do not touch it if no payload is present
+              if (ctx.payload == nil) {
+                NSLog(@"Cannot update segment context when the current context payload is empty.");
+                return;
+              }
 
-    configuration.middlewares = @[
-      [[SEGBlockMiddleware alloc] initWithBlock:contextMiddleware]
-    ];
+              @try {
+                // We need to perform a deep merge to not lose any sub-dictionary
+                // that is already set. [contextToAppend] has precedence over [ctx.payload.context] values
+                NSDictionary *combinedContext = [FlutterSegmentPlugin
+                  mergeDictionary: ctx.payload.context == nil
+                    ? [[NSDictionary alloc] init]
+                    : [ctx.payload.context copy]
+                  with: _appendToContextMiddleware];
 
-    configuration.trackApplicationLifecycleEvents = trackApplicationLifecycleEvents;
-
-    if (isAmplitudeIntegrationEnabled) {
+                // SEGPayload does not offer copyWith* methods, so we have to
+                // manually test and re-create it for each of its type.
+                if ([ctx.payload isKindOfClass:[SEGTrackPayload class]]) {
+                  ctx.payload = [[SEGTrackPayload alloc]
+                    initWithEvent: ((SEGTrackPayload*)ctx.payload).event
+                    properties: ((SEGTrackPayload*)ctx.payload).properties
+                    context: combinedContext
+                    integrations: ((SEGTrackPayload*)ctx.payload).integrations
+                  ];
+                } else if ([ctx.payload isKindOfClass:[SEGScreenPayload class]]) {
+                  ctx.payload = [[SEGScreenPayload alloc]
+                    initWithName: ((SEGScreenPayload*)ctx.payload).name
+                    category: ((SEGScreenPayload*)ctx.payload).category
+                    properties: ((SEGScreenPayload*)ctx.payload).properties
+                    context: combinedContext
+                    integrations: ((SEGScreenPayload*)ctx.payload).integrations
+                  ];
+                } else if ([ctx.payload isKindOfClass:[SEGGroupPayload class]]) {
+                  ctx.payload = [[SEGGroupPayload alloc]
+                    initWithGroupId: ((SEGGroupPayload*)ctx.payload).groupId
+                    traits: ((SEGGroupPayload*)ctx.payload).traits
+                    context: combinedContext
+                    integrations: ((SEGGroupPayload*)ctx.payload).integrations
+                  ];
+                } else if ([ctx.payload isKindOfClass:[SEGIdentifyPayload class]]) {
+                  ctx.payload = [[SEGIdentifyPayload alloc]
+                    initWithUserId: ((SEGIdentifyPayload*)ctx.payload).userId
+                    anonymousId: ((SEGIdentifyPayload*)ctx.payload).anonymousId
+                    traits: ((SEGIdentifyPayload*)ctx.payload).traits
+                    context: combinedContext
+                    integrations: ((SEGIdentifyPayload*)ctx.payload).integrations
+                  ];
+                }
+              }
+              @catch (NSException *exception) {
+                NSLog(@"Could not update segment context: %@", [exception reason]);
+              }
+            }]
+          );
+        };
+        
+        configuration.sourceMiddleware = @[
+          [[SEGBlockMiddleware alloc] initWithBlock:contextMiddleware]
+        ];
         NSLog(@"Segment Amplitude enabled");
-      [configuration use:[SEGAmplitudeIntegrationFactory instance]];
     }
 
     if (isFirebaseIntegrationEnabled) {
         NSLog(@"Segment Firebase enabled");
         [configuration use:[SEGFirebaseIntegrationFactory instance]];
+        [SEGAnalytics setupWithConfiguration:configuration];
     }
-
-    [SEGAnalytics setupWithConfiguration:configuration];
-    FlutterMethodChannel* channel = [FlutterMethodChannel
-      methodChannelWithName:@"flutter_segment"
-      binaryMessenger:[registrar messenger]];
-    FlutterSegmentPlugin* instance = [[FlutterSegmentPlugin alloc] init];
-    [registrar addMethodCallDelegate:instance channel:channel];
-  }
-  @catch (NSException *exception) {
-    NSLog(@"%@", [exception reason]);
-  }
+    @catch (NSException *exception) {
+      NSLog(@"%@", [exception reason]);
+    }
 }
 
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-  if ([@"identify" isEqualToString:call.method]) {
+  if ([@"config" isEqualToString:call.method] && !wasSetupFromFile) {
+    [self config:call result:result];
+  } else if ([@"identify" isEqualToString:call.method]) {
     [self identify:call result:result];
   } else if ([@"track" isEqualToString:call.method]) {
     [self track:call result:result];
@@ -146,6 +147,8 @@ static NSDictionary *_appendToContextMiddleware;
     [self disable:result];
   } else if ([@"enable" isEqualToString:call.method]) {
     [self enable:result];
+  } else if ([@"flush" isEqualToString:call.method]) {
+    [self flush:result];
   } else if ([@"debug" isEqualToString:call.method]) {
     [self debug:call result:result];
   } else if ([@"setContext" isEqualToString:call.method]) {
@@ -153,6 +156,22 @@ static NSDictionary *_appendToContextMiddleware;
   } else {
     result(FlutterMethodNotImplemented);
   }
+}
+
+- (void)config:(FlutterMethodCall*)call result:(FlutterResult)result {
+  @try {
+    NSDictionary *options = call.arguments[@"options"];
+    SEGAnalyticsConfiguration *configuration = [FlutterSegmentPlugin createConfigFromDict:options];
+    [self setup:configuration];
+    result([NSNumber numberWithBool:YES]);
+  }
+  @catch (NSException *exception) {
+    result([FlutterError
+      errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
+  }
+
 }
 
 - (void)setContext:(FlutterMethodCall*)call result:(FlutterResult)result {
@@ -165,7 +184,7 @@ static NSDictionary *_appendToContextMiddleware;
     result([FlutterError
       errorWithCode:@"FlutterSegmentException"
       message:[exception reason]
-      details: nil]);
+      details: [NSThread  callStackSymbols].description]);
   }
 
 }
@@ -175,16 +194,20 @@ static NSDictionary *_appendToContextMiddleware;
     NSString *userId = call.arguments[@"userId"];
     NSDictionary *traits = call.arguments[@"traits"];
     NSDictionary *options = call.arguments[@"options"];
+
+    userId = [userId isEqual:[NSNull null]]? nil: userId;
+
     [[SEGAnalytics sharedAnalytics] identify: userId
                       traits: traits
                      options: options];
+
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
     result([FlutterError
       errorWithCode:@"FlutterSegmentException"
       message:[exception reason]
-      details: nil]);
+      details: @"[NSThread  callStackSymbols].description"]);
   }
 }
 
@@ -199,7 +222,10 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError
+      errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -214,7 +240,10 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError
+      errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -229,7 +258,9 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -242,7 +273,9 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -252,7 +285,9 @@ static NSDictionary *_appendToContextMiddleware;
     result(anonymousId);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -262,7 +297,9 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -272,7 +309,9 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -282,7 +321,21 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
+  }
+}
+
+- (void)flush:(FlutterResult)result {
+  @try {
+    [[SEGAnalytics sharedAnalytics] flush];
+    result([NSNumber numberWithBool:YES]);
+  }
+  @catch (NSException *exception) {
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
 }
 
@@ -293,8 +346,48 @@ static NSDictionary *_appendToContextMiddleware;
     result([NSNumber numberWithBool:YES]);
   }
   @catch (NSException *exception) {
-    result([FlutterError errorWithCode:@"FlutterSegmentException" message:[exception reason] details: nil]);
+    result([FlutterError errorWithCode:@"FlutterSegmentException"
+      message:[exception reason]
+      details: [NSThread  callStackSymbols].description]);
   }
+}
+
++ (SEGAnalyticsConfiguration*)createConfigFromFile {
+    NSString *path = [[NSBundle mainBundle] pathForResource: @"Info" ofType: @"plist"];
+    NSDictionary *dict = [NSDictionary dictionaryWithContentsOfFile: path];
+    NSString *writeKey = [dict objectForKey: @"com.claimsforce.segment.WRITE_KEY"];
+    BOOL trackApplicationLifecycleEvents = [[dict objectForKey: @"com.claimsforce.segment.TRACK_APPLICATION_LIFECYCLE_EVENTS"] boolValue];
+    BOOL isAmplitudeIntegrationEnabled = [[dict objectForKey: @"com.claimsforce.segment.ENABLE_AMPLITUDE_INTEGRATION"] boolValue];
+    if(!writeKey) {
+        return nil;
+    }
+    SEGAnalyticsConfiguration *configuration = [SEGAnalyticsConfiguration configurationWithWriteKey:writeKey];
+    configuration.trackApplicationLifecycleEvents = trackApplicationLifecycleEvents;
+
+    if (isAmplitudeIntegrationEnabled) {
+      [configuration use:[SEGAmplitudeIntegrationFactory instance]];
+    }
+
+    return configuration;
+}
+
++ (SEGAnalyticsConfiguration*)createConfigFromDict:(NSDictionary*) dict {
+    NSString *writeKey = [dict objectForKey: @"writeKey"];
+    BOOL trackApplicationLifecycleEvents = [[dict objectForKey: @"trackApplicationLifecycleEvents"] boolValue];
+    BOOL isAmplitudeIntegrationEnabled = [[dict objectForKey: @"amplitudeIntegrationEnabled"] boolValue];
+    BOOL isAppsflyerIntegrationEnabled = [[dict objectForKey: @"appsflyerIntegrationEnabled"] boolValue];
+    SEGAnalyticsConfiguration *configuration = [SEGAnalyticsConfiguration configurationWithWriteKey:writeKey];
+    configuration.trackApplicationLifecycleEvents = trackApplicationLifecycleEvents;
+
+    if (isAmplitudeIntegrationEnabled) {
+      [configuration use:[SEGAmplitudeIntegrationFactory instance]];
+    }
+
+    if (isAppsflyerIntegrationEnabled) {
+      [configuration use:[SEGAppsFlyerIntegrationFactory instance]];
+    }
+
+    return configuration;
 }
 
 + (NSDictionary *) mergeDictionary: (NSDictionary *) first with: (NSDictionary *) second {

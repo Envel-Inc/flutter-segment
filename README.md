@@ -1,5 +1,8 @@
 # Segment plugin
 [![Pub Version](https://img.shields.io/pub/v/flutter_segment)](https://pub.dev/packages/flutter_segment)
+[![style: lint](https://img.shields.io/badge/style-lint-4BC0F5.svg)](https://pub.dev/packages/lint)
+
+This library was created by our friends at [claimsforce-gmbh](https://github.com/claimsforce-gmbh) to whom we are deeply grateful for letting us contribute. From now this project will be maintained from this repository.
 
 Flutter plugin to support iOS, Android and Web sources at https://segment.com.
 
@@ -10,20 +13,24 @@ Please have a look at [this issue](https://github.com/claimsforce-gmbh/flutter-s
 ## Usage
 To use this plugin, add `flutter_segment` as a [dependency in your pubspec.yaml file](https://flutter.io/platform-plugins/).
 
+### Important note for iOS usage
+Since version `3.5.0` we are forcing all users to use `use_frameworks!` within the [`Podfile`](https://github.com/claimsforce-gmbh/flutter-segment/blob/master/example/ios/Podfile#L31) due to import issues of some 3rd party dependencies.
+
 ### Supported methods
-| Method | Android | iOS | Web |
-|---|---|---|---|
-| `identify` | X | X | X |
-| `track` | X | X | X |
-| `screen` | X | X | X |
-| `group` | X | X | X |
-| `alias` | X | X | X |
+| Method           | Android | iOS | Web |
+|------------------|---|---|---|
+| `identify`       | X | X | X |
+| `track`          | X | X | X |
+| `screen`         | X | X | X |
+| `group`          | X | X | X |
+| `alias`          | X | X | X |
 | `getAnonymousId` | X | X | X |
-| `reset` | X | X | X |
-| `disable` | X | X | |
-| `enable` | X | X | |
-| `debug` | X* | X | X |
-| `setContext` | X | X | |
+| `reset`          | X | X | X |
+| `disable`        | X | X | |
+| `enable`         | X | X | |
+| `flush`          | X | X | |
+| `debug`          | X* | X | X |
+| `setContext`     | X | X | |
 
 \* Debugging must be set as a configuration parameter in `AndroidManifest.xml` (see below). The official segment library does not offer the debug method for Android.
 
@@ -81,7 +88,32 @@ Setup your Android, iOS and/or web sources as described at Segment.com and gener
 Set your Segment write key and change the automatic event tracking (only for Android and iOS) on if you wish the library to take care of it for you.
 Remember that the application lifecycle events won't have any special context set for you by the time it is initialized.
 
-### Android`
+### Via Dart Code
+```dart
+void main() {
+  /// Wait until the platform channel is properly initialized so we can call
+  /// `setContext` during the app initialization.
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  String writeKey;
+  if(Platform.isAndroid){
+    writeKey = "ANDROID_WRITE_KEY";
+  } else{ //iOS
+      writeKey = "IOS_WRITE_KEY";
+  }
+
+  Segment.config(
+    options: SegmentConfig(
+      writeKey: 'YOUR_WRITE_KEY_GOES_HERE',
+      trackApplicationLifecycleEvents: false,
+      amplitudeIntegrationEnabled: false,
+      debug: false,
+    ),
+  );
+}
+```
+
+### Android _(Deprecated*)_
 ```xml
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.flutter_segment_example">
     <application>
@@ -96,20 +128,20 @@ Remember that the application lifecycle events won't have any special context se
 </manifest>
 ```
 
-### iOS
+### iOS _(Deprecated*)_
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	[...]
-	<key>com.claimsforce.segment.WRITE_KEY</key>
-	<string>YOUR_WRITE_KEY_GOES_HERE</string>
-	<key>com.claimsforce.segment.TRACK_APPLICATION_LIFECYCLE_EVENTS</key>
-	<false/>
-	<key>com.claimsforce.segment.ENABLE_AMPLITUDE_INTEGRATION</key>
-    <false/>
-	[...]
+  [...]
+  <key>com.claimsforce.segment.WRITE_KEY</key>
+  <string>YOUR_WRITE_KEY_GOES_HERE</string>
+  <key>com.claimsforce.segment.TRACK_APPLICATION_LIFECYCLE_EVENTS</key>
+  <false/>
+  <key>com.claimsforce.segment.ENABLE_AMPLITUDE_INTEGRATION</key>
+  <false/>
+  [...]
 </dict>
 </plist>
 ```
@@ -208,3 +240,5 @@ Please file any issues, bugs, or feature requests in the [GitHub repo](https://g
 
 ## Contributing
 If you wish to contribute a change to this repo, please send a [pull request](https://github.com/claimsforce-gmbh/flutter-segment/pulls).
+
+_<sup>*</sup>This installation method will be removed, please use the [Installation via Dart Code](#via-dart-code) instructions._

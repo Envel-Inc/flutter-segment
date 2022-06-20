@@ -1,17 +1,14 @@
 package com.example.flutter_segment;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
 import com.segment.analytics.Analytics;
-import com.segment.analytics.AnalyticsContext;
 import com.segment.analytics.Properties;
 import com.segment.analytics.Traits;
 import com.segment.analytics.Options;
@@ -19,6 +16,7 @@ import com.segment.analytics.Middleware;
 import com.segment.analytics.integrations.BasePayload;
 import com.segment.analytics.android.integrations.amplitude.AmplitudeIntegration;
 import com.segment.analytics.android.integrations.firebase.FirebaseIntegration;
+import com.segment.analytics.android.integrations.appsflyer.AppsflyerIntegration;
 import static com.segment.analytics.Analytics.LogLevel;
 
 import java.util.LinkedHashMap;
@@ -53,37 +51,50 @@ public class FlutterSegmentPlugin implements MethodCallHandler, FlutterPlugin {
   }
 
   private void setupChannels(Context applicationContext, BinaryMessenger messenger) {
-    try {
-      methodChannel = new MethodChannel(messenger, "flutter_segment");
-      this.applicationContext = applicationContext;
+    this.applicationContext = applicationContext;
 
+    methodChannel = new MethodChannel(messenger, "flutter_segment");
+    // register the channel to receive calls
+    methodChannel.setMethodCallHandler(this);
+
+    try {
       ApplicationInfo ai = applicationContext.getPackageManager()
-        .getApplicationInfo(applicationContext.getPackageName(), PackageManager.GET_META_DATA);
+              .getApplicationInfo(applicationContext.getPackageName(), PackageManager.GET_META_DATA);
 
       Bundle bundle = ai.metaData;
 
-      String writeKey = bundle.getString("com.claimsforce.segment.WRITE_KEY");
-      Boolean trackApplicationLifecycleEvents = bundle.getBoolean("com.claimsforce.segment.TRACK_APPLICATION_LIFECYCLE_EVENTS");
-      Boolean isAmplitudeIntegrationEnabled = bundle.getBoolean("com.claimsforce.segment.ENABLE_AMPLITUDE_INTEGRATION", false);
-      Boolean isFirebaseIntegrationEnabled = bundle.getBoolean("com.claimsforce.segment.ENABLE_FIREBASE_INTEGRATION", false);
-      Boolean debug = bundle.getBoolean("com.claimsforce.segment.DEBUG", false);
+      FlutterSegmentOptions options = FlutterSegmentOptions.create(bundle);
+      setupChannels(options);
+    } catch (Exception e) {
+      Log.e("FlutterSegment", e.getMessage());
+    }
+  }
 
-      Analytics.Builder analyticsBuilder = new Analytics.Builder(applicationContext, writeKey);
-      if (trackApplicationLifecycleEvents) {
-        // Enable this to record certain application events automatically
+  private void setupChannels(FlutterSegmentOptions options) {
+    try {
+      Analytics.Builder analyticsBuilder = new Analytics.Builder(applicationContext, options.getWriteKey());
+      if (options.getTrackApplicationLifecycleEvents()) {
+        Log.i("FlutterSegment", "Lifecycle events enabled");
+
         analyticsBuilder.trackApplicationLifecycleEvents();
+      } else {
+        Log.i("FlutterSegment", "Lifecycle events are not been tracked");
       }
 
-      if (debug) {
+      if (options.getDebug()) {
         analyticsBuilder.logLevel(LogLevel.DEBUG);
       }
 
-      if (isAmplitudeIntegrationEnabled) {
+      if (options.isAmplitudeIntegrationEnabled()) {
         analyticsBuilder.use(AmplitudeIntegration.FACTORY);
       }
 
       if (isFirebaseIntegrationEnabled) {
         analyticsBuilder.use(FirebaseIntegration.FACTORY);
+      }
+
+      if (options.isAppsflyerIntegrationEnabled()) {
+        analyticsBuilder.use(AppsflyerIntegration.FACTORY);
       }
 
       // Here we build a middleware that just appends data to the current context
@@ -127,8 +138,6 @@ public class FlutterSegmentPlugin implements MethodCallHandler, FlutterPlugin {
       } catch (IllegalStateException e) {
         Log.w("FlutterSegment", e.getMessage());
       }
-      // register the channel to receive calls
-      methodChannel.setMethodCallHandler(this);
     } catch (Exception e) {
       Log.e("FlutterSegment", e.getMessage());
     }
@@ -139,7 +148,9 @@ public class FlutterSegmentPlugin implements MethodCallHandler, FlutterPlugin {
 
   @Override
   public void onMethodCall(MethodCall call, Result result) {
-    if(call.method.equals("identify")) {
+    if(call.method.equals("config")) {
+      this.config(call, result);
+    } else if(call.method.equals("identify")) {
       this.identify(call, result);
     } else if (call.method.equals("track")) {
       this.track(call, result);
@@ -159,8 +170,21 @@ public class FlutterSegmentPlugin implements MethodCallHandler, FlutterPlugin {
       this.disable(call, result);
     } else if (call.method.equals("enable")) {
       this.enable(call, result);
+    } else if (call.method.equals("flush")) {
+      this.flush(call, result);
     } else {
       result.notImplemented();
+    }
+  }
+
+  private void config(MethodCall call, Result result) {
+    try {
+      HashMap<String, Object> configData = call.argument("options");
+      FlutterSegmentOptions options = FlutterSegmentOptions.create(configData);
+      this.setupChannels(options);
+      result.success(true);
+    } catch (Exception e) {
+      result.error("FlutterSegmentException", e.getLocalizedMessage(), null);
     }
   }
 
@@ -312,6 +336,15 @@ public class FlutterSegmentPlugin implements MethodCallHandler, FlutterPlugin {
   private void enable(MethodCall call, Result result) {
     try {
       Analytics.with(this.applicationContext).optOut(false);
+      result.success(true);
+    } catch (Exception e) {
+      result.error("FlutterSegmentException", e.getLocalizedMessage(), null);
+    }
+  }
+
+  private void flush(MethodCall call, Result result) {
+    try {
+      Analytics.with(this.applicationContext).flush();
       result.success(true);
     } catch (Exception e) {
       result.error("FlutterSegmentException", e.getLocalizedMessage(), null);

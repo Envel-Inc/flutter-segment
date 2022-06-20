@@ -8,6 +8,13 @@ void main() {
   /// `setContext` during the app initialization.
   WidgetsFlutterBinding.ensureInitialized();
 
+  Segment.config(
+    options: SegmentConfig(
+      writeKey: 'YOUR_WRITE_KEY_GOES_HERE',
+      trackApplicationLifecycleEvents: false,
+    ),
+  );
+
   /// The `context.device.token` is a special property.
   /// When you define it, setting the context again with no token property (ex: `{}`)
   /// has no effect on cleaning up the device token.
@@ -36,17 +43,21 @@ class MyApp extends StatelessWidget {
     Segment.screen(
       screenName: 'Example Screen',
     );
+
+    // If you want to flush the data now
+    Segment.flush();
+
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: Text('Segment example app'),
+          title: const Text('Segment example app'),
         ),
         body: Column(
           children: <Widget>[
-            Spacer(),
+            const Spacer(),
             Center(
-              child: FlatButton(
-                child: Text('TRACK ACTION WITH SEGMENT'),
+              child: ElevatedButton(
+                child: const Text('TRACK ACTION WITH SEGMENT'),
                 onPressed: () {
                   Segment.track(
                     eventName: 'ButtonClicked',
@@ -59,56 +70,57 @@ class MyApp extends StatelessWidget {
                 },
               ),
             ),
-            Spacer(),
+            const Spacer(),
             Center(
-              child: FlatButton(
-                child: Text('Update Context'),
+              child: ElevatedButton(
+                child: const Text('Update Context'),
                 onPressed: () {
                   Segment.setContext({'custom': 123});
                 },
               ),
             ),
-            Spacer(),
+            const Spacer(),
             Center(
-              child: FlatButton(
-                child: Text('Clear Context'),
+              child: ElevatedButton(
+                child: const Text('Clear Context'),
                 onPressed: () {
                   Segment.setContext({});
                 },
               ),
             ),
-            Spacer(),
+            const Spacer(),
             Center(
-              child: FlatButton(
-                child: Text('Disable'),
+              child: ElevatedButton(
+                child: const Text('Disable'),
                 onPressed: () async {
                   await Segment.disable();
                   Segment.track(eventName: 'This event will not be logged');
                 },
               ),
             ),
-            Spacer(),
+            const Spacer(),
             Center(
-              child: FlatButton(
-                child: Text('Enable'),
+              child: ElevatedButton(
+                child: const Text('Enable'),
                 onPressed: () async {
                   await Segment.enable();
                   Segment.track(eventName: 'Enabled tracking events!');
                 },
               ),
             ),
-            Spacer(),
-            Platform.isIOS
-                ? Center(
-                    child: FlatButton(
-                      child: Text('Debug mode'),
-                      onPressed: () {
-                        Segment.debug(true);
-                      },
-                    ),
-                  )
-                : Container(),
-            Spacer(),
+            const Spacer(),
+            if (Platform.isIOS)
+              Center(
+                child: ElevatedButton(
+                  child: const Text('Debug mode'),
+                  onPressed: () {
+                    Segment.debug(true);
+                  },
+                ),
+              )
+            else
+              Container(),
+            const Spacer(),
           ],
         ),
       ),
